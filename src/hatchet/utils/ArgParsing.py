@@ -465,11 +465,11 @@ def parse_count_reads_args(args=None):
         help='1bed file containing SNP information from tumor samples (i.e., baf/bulk.1bed)',
     )
     parser.add_argument(
-        '-V',
-        '--refversion',
+        '-r',
+        '--reference',
         required=True,
         type=str,
-        help='Version of reference genome used in BAM files',
+        help='Path to reference genome file',
     )
     parser.add_argument(
         '-O',
@@ -589,10 +589,17 @@ def parse_count_reads_args(args=None):
     else:
         use_chr = False
 
-    ver = args.refversion
     ensure(
-        ver in ('hg19', 'hg38'),
-        'Invalid reference genome version. Supported versions are hg38 and hg19.',
+        isfile(args.reference),
+        'The provided file for a reference genome does not exist!',
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.dict'),
+        'The dictionary .dict of the reference genome not found! Please remember to index it.'
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.centromeres.txt'),
+        'The centromeres file associated with this reference genome is not found!'
     )
     ensure(os.path.exists(args.baffile), f'BAF file not found: {args.baffile}')
     ensure(
@@ -631,7 +638,7 @@ def parse_count_reads_args(args=None):
         'j': args.processes,
         'outdir': args.outdir,
         'use_chr': use_chr,
-        'refversion': ver,
+        'centromeres': os.path.splitext(args.reference)[0] + '.centromeres.txt',
         'baf_file': args.baffile,
         'readquality': args.readquality,
     }
@@ -736,11 +743,11 @@ def parse_combine_counts_args(args=None):
         help='Non-compressed intermediate files',
     )
     parser.add_argument(
-        '-V',
-        '--refversion',
+        '-r',
+        '--reference',
         required=True,
         type=str,
-        help='Version of reference genome used in BAM files',
+        help='Path to reference genome fasta file',
     )
     args = parser.parse_args(args)
 
@@ -806,10 +813,17 @@ def parse_combine_counts_args(args=None):
     )
     ensure(args.mtr > 0, 'The minimum number of total reads must be positive.')
 
-    ver = args.refversion
     ensure(
-        ver in ('hg19', 'hg38'),
-        'Invalid reference genome version. Supported versions are hg38 and hg19.',
+        isfile(args.reference),
+        'The provided file for a reference genome does not exist!',
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.dict'),
+        'The dictionary .dict of the reference genome not found! Please remember to index it.'
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.centromeres.txt'),
+        'The centromeres file associated with this reference genome is not found!'
     )
 
     outdir = os.sep.join(args.outfile.split(os.sep)[:-1])
@@ -834,7 +848,7 @@ def parse_combine_counts_args(args=None):
         'max_snps_per_block': args.max_spb,
         'test_alpha': args.alpha,
         'multisample': not args.ss_em,
-        'ref_version': ver,
+        'centromeres': os.path.splitext(args.reference)[0] + '.centromeres.txt',
     }
 
 
@@ -853,7 +867,7 @@ def parse_genotype_snps_arguments(args=None):
         '--reference',
         required=True,
         type=str,
-        help='Human reference genome of BAMs',
+        help='Path to reference genome file',
     )
     parser.add_argument(
         '-st',
@@ -985,7 +999,15 @@ def parse_genotype_snps_arguments(args=None):
     # Check that SNP, reference, and region files exist when given in input
     ensure(
         isfile(args.reference),
-        'The provided file for human reference genome does not exist!',
+        'The provided file for a reference genome does not exist!',
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.dict'),
+        'The dictionary .dict of the reference genome not found! Please remember to index it.'
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.centromeres.txt'),
+        'The centromeres file associated with this reference genome is not found!'
     )
     ensure(
         (args.outputsnps is None) or (isdir(args.outputsnps)),
@@ -1091,11 +1113,11 @@ def parse_phase_snps_arguments(args=None):
         help='Path to Reference genome used in BAM files',
     )
     parser.add_argument(
-        '-V',
-        '--refversion',
+        '-r',
+        '--reference',
         required=True,
         type=str,
-        help='Version of reference genome used in BAM files',
+        help='Path to reference genome fasta file',
     )
     parser.add_argument(
         '-N',
@@ -1206,11 +1228,18 @@ def parse_phase_snps_arguments(args=None):
     if which(bcftools) is None:
         raise ValueError(error('bcftools has not been found or is not executable!'))
 
-    if args.refversion not in ('hg19', 'hg38'):
-        error(
-            'The reference genome version of your samples is not "hg19" or "hg38".',
-            raise_exception=True,
-        )
+    ensure(
+        isfile(args.reference),
+        'The provided file for a reference genome does not exist!',
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.dict'),
+        'The dictionary .dict of the reference genome not found! Please remember to index it.'
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.centromeres.txt'),
+        'The centromeres file associated with this reference genome is not found!'
+    )
 
     rpd = args.refpaneldir
     if not os.path.exists(os.path.join(rpd, '1000GP_Phase3', '1000GP_Phase3.sample')):
@@ -1236,7 +1265,7 @@ def parse_phase_snps_arguments(args=None):
         'j': args.processes,
         'chromosomes': chromosomes,
         'snps': snplists,
-        'refvers': args.refversion,
+        'centromeres': os.path.splitext(args.reference)[0] + '.centromeres.txt',
         'chrnot': args.chrnotation,
         'refgenome': args.refgenome,
         'outdir': os.path.abspath(args.outdir),
@@ -1275,7 +1304,7 @@ def parse_count_alleles_arguments(args=None):
         '--reference',
         required=True,
         type=str,
-        help='Human reference genome of BAMs',
+        help='Path to reference genome fasta file',
     )
     parser.add_argument(
         '-L',
@@ -1478,6 +1507,10 @@ def parse_count_alleles_arguments(args=None):
         snplists = {os.path.basename(f).split('.')[0]: f for f in args.snps}
     if not isfile(args.reference):
         raise ValueError(error('The provided file for human reference genome does not exist!'))
+    if not isfile(os.path.splitext(args.reference)[0] + '.dict'):
+        raise ValueError(error('The dictionary .dict of the reference genome not found! Please remember to index it.'))
+    if not isfile(os.path.splitext(args.reference)[0] + '.centromeres.txt'):
+        raise ValueError(error('The centromeres file associated with this reference genome is not found!'))
 
     # Extract the names of the chromosomes and check their consistency across the given BAM files and the reference
     chromosomes = extractChromosomes(samtools, normal, samples, args.reference)
@@ -1739,6 +1772,14 @@ def parse_count_reads_fw_arguments(args=None):
             'The dictionary of the reference genome has not been found! Reference genome must be indexed and its '
             'dictionary must exist in the same directory with same name but extension .dict'
         ),
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.dict'),
+        'The dictionary .dict of the reference genome not found! Please remember to index it.'
+    )
+    ensure(
+        isfile(os.path.splitext(args.reference)[0] + '.centromeres.txt'),
+        'The centromeres file associated with this reference genome is not found!'
     )
 
     # Extract the names of the chromosomes and check their consistency across the given BAM files and the reference
