@@ -8,7 +8,21 @@ import hashlib
 from urllib.parse import urlparse
 import tarfile
 from string import ascii_uppercase
+import pandas as pd
+import numpy as np
 
+def read_baf_file(baf_file):
+    return pd.read_table(
+        baf_file,
+        names=['CHR', 'POS', 'SAMPLE', 'REF', 'ALT'],
+        dtype={
+            'CHR': object,
+            'POS': np.uint32,
+            'SAMPLE': object,
+            'ALT': np.uint32,
+            'REF': np.uint32,
+        },
+    )
 
 def checksum(filepath):
     return hashlib.md5(open(filepath, 'rb').read()).hexdigest()

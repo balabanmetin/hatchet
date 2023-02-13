@@ -12,6 +12,7 @@ from hatchet.utils.Supporting import (
     url_exists,
     bcolors,
     numericOrder,
+    read_baf_file
 )
 from hatchet import config, __version__
 
@@ -572,9 +573,20 @@ def parse_count_reads_args(args=None):
         which(samtools) is not None,
         'samtools has not been found or is not executable.',
     )
-
+    ensure(os.path.exists(args.baffile), f'BAF file not found: {args.baffile}')
+    try:
+        baf_file = read_baf_file(args.baffile)
+    except:
+        raise ValueError(error('The input BAF file cannot be parsed!'))
+    bafFileChromosomeNames = list(set(baf_file['CHR'].values))
+    if bafFileChromosomeNames != args.chromosomes:
+        log(
+            msg='The following chromosomes are found in the VCF filenames.\n'
+                f'{bafFileChromosomeNames}\n',
+            level='WARN',
+        )
     # Extract the names of the chromosomes and check their consistency across the given BAM files and the reference
-    chromosomes = extractChromosomes(samtools, [bams[0], 'normal'], [(x, '') for x in bams[1:]])
+    chromosomes = extractChromosomes(samtools, bafFileChromosomeNames, [bams[0], 'normal'], [(x, '') for x in bams[1:]])
     if args.chromosomes:
         chromosomes = [c for c in chromosomes if c in args.chromosomes]
 
@@ -594,7 +606,6 @@ def parse_count_reads_args(args=None):
         ver in ('hg19', 'hg38'),
         'Invalid reference genome version. Supported versions are hg38 and hg19.',
     )
-    ensure(os.path.exists(args.baffile), f'BAF file not found: {args.baffile}')
     ensure(
         args.processes > 0,
         'The number of parallel processes must be greater than 0',
@@ -998,7 +1009,7 @@ def parse_genotype_snps_arguments(args=None):
         error('The provided list of SNPs does not exist!', raise_exception=True)
 
     # Extract the names of the chromosomes and check their consistency across the given BAM files and the reference
-    chromosomes = extractChromosomes(samtools, normal, [], args.reference)
+    chromosomes = extractChromosomes(samtools, args.chromosomes, normal, [], args.reference)
     if args.chromosomes:
         chromosomes = [c for c in chromosomes if c in args.chromosomes]
 
@@ -1479,8 +1490,16 @@ def parse_count_alleles_arguments(args=None):
     if not isfile(args.reference):
         raise ValueError(error('The provided file for human reference genome does not exist!'))
 
+    # VCF file names should match chromosome names
+    providedVcfChromosomeNames = list(snplists.keys())
+    if args.chromosomes != providedVcfChromosomeNames:
+        log(
+            msg='The following chromosomes are found in the VCF filenames.\n'
+                f'{providedVcfChromosomeNames}\n',
+            level='WARN',
+        )
     # Extract the names of the chromosomes and check their consistency across the given BAM files and the reference
-    chromosomes = extractChromosomes(samtools, normal, samples, args.reference)
+    chromosomes = extractChromosomes(samtools, providedVcfChromosomeNames, normal, samples, args.reference)
     if args.chromosomes:
         chromosomes = [c for c in chromosomes if c in args.chromosomes]
     snplists = {c: snplists.get(c, []) for c in chromosomes}
@@ -2365,7 +2384,7 @@ def parse_plot_bins_args(args=None):
     }
 
 
-def extractChromosomes(samtools, normal, tumors, reference=None):
+def extractChromosomes(samtools, chromosomes_list, normal, tumors, reference=None):
     """
     Parameters:
         samtools: path to samtools executable
@@ -2374,49 +2393,39 @@ def extractChromosomes(samtools, normal, tumors, reference=None):
         reference: path to FASTA file
     """
 
-    # Read the names of sequences in normal BAM file
-    normal_sq = getSQNames(samtools, normal[0])
-
-    # Extract only the names of chromosomes in standard formats
-    chrm = set()
-    no_chrm = set()
-    for i in range(1, 23):
-        if str(i) in normal_sq:
-            no_chrm.add(str(i))
-        elif 'chr' + str(i) in normal_sq:
-            chrm.add('chr' + str(i))
-        else:
-            sys.stderr.write(
-                (
-                    f'WARNING: a chromosome named either {i} or a variant of CHR{i} cannot be found in the normal ',
-                    'BAM file\n',
-                )
-            )
-
-    for c in ['X', 'Y']:
-        if c in normal_sq:
-            no_chrm.add(c)
-        elif 'chr' + c in normal_sq:
-            chrm.add('chr' + c)
-        else:
-            sys.stderr.write(
-                (
-                    f'WARNING: a chromosome named either {c} or a variant of CHR{c} cannot be found in the normal ',
-                    'BAM file\n',
-                )
-            )
-
-    if len(chrm) == 0 and len(no_chrm) == 0:
-        raise ValueError('No chromosomes found in the normal BAM')
-    chromosomes = chrm if len(chrm) > len(no_chrm) else no_chrm
-
-    # Check that chromosomes with the same names are present in each tumor BAM contain
+    chromosomes = set(chromosomes_list)
+    commons = set(chromosomes_list)
+    # Read the names of sequences in tumor files
     for tumor in tumors:
         tumor_sq = getSQNames(samtools, tumor[0])
+        ensure(
+            chromosomes.intersection(tumor_sq) != set(),
+            (
+                f'Tumor sample {tumor[1]} cannot be used because of the chromosome name inconsistency!\nChromosomes found '
+                f'in the BAM file: {tumor_sq}\n Chromosome name(s) provided by the user: {chromosomes}',
+            )
+        )
         if not chromosomes <= tumor_sq:
             sys.stderr.write(
-                'WARNING: chromosomes {} are not present in the tumor sample {}\n'.format(chromosomes - tumor_sq, tumor)
+                'WARNING: chromosomes {} are not present in the tumor sample {}\n'.format(chromosomes - tumor_sq, tumor[1])
             )
+        commons = commons.intersection(tumor_sq)
+
+    if normal:
+        # Read the names of sequences in normal BAM file
+        normal_sq = getSQNames(samtools, normal[0])
+        ensure(
+            chromosomes.intersection(normal_sq) != set(),
+            (
+                f'Normal sample {normal[1]} cannot be used because of the chromosome name inconsistency!\nChromosomes found '
+                f'in the BAM file: {normal_sq}\n Chromosome name(s) provided by the user: {chromosomes}',
+            )
+        )
+        if not chromosomes <= normal_sq:
+            sys.stderr.write(
+                'WARNING: chromosomes {} are not present in the normal sample {}\n'.format(chromosomes - normal_sq, normal[1])
+            )
+        commons = commons.intersection(normal_sq)
 
     # Check consistency of chromosome names with the reference
     if reference is not None:
@@ -2431,12 +2440,28 @@ def extractChromosomes(samtools, normal, tumors, reference=None):
         else:
             ref = set(c[1:].strip().split()[0] for c in stdout.strip().split('\n'))
         ensure(
-            chromosomes <= ref,
+            chromosomes.intersection(ref) != set(),
             (
-                'The given reference cannot be used because the chromosome names are inconsistent!\nChromosomes found '
-                f'in BAF files: {chromosomes}\nChromosomes with the same name found in reference genome: {ref}',
-            ),
+                f'The reference cannot be used because of the chromosome name inconsistency!\nChromosomes found '
+                f'in the reference file: {ref}\n Chromosome name(s) provided by the user: {chromosomes}',
+            )
         )
+        if not chromosomes <= ref:
+            sys.stderr.write(
+                'WARNING: chromosomes {} are not present in the reference\n'.format(chromosomes - ref)
+            )
+        commons = commons.intersection(ref)
+
+    if not commons:
+        raise ValueError('There are no chromosomes present in all sample files and the reference\n'
+                         'Please make sure chromosome names are consistent in the reference, BAM files,'
+                         ' and the user provided chromosome names.')
+    if commons != chromosomes:
+        sys.stderr.write(
+            'WARNING: only the following chromosomes can be found in all samples and the reference\n'
+            '{}\n The analysis will be restricted to this set.'.format(commons)
+        )
+    chromosomes = commons
 
     return sorted(list(chromosomes), key=numericOrder)
 

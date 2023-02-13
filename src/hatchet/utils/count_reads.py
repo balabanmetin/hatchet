@@ -10,6 +10,7 @@ import traceback
 from importlib.resources import path
 import hatchet.data
 
+from hatchet.utils.Supporting import read_baf_file
 from hatchet.utils.ArgParsing import parse_count_reads_args
 from hatchet.utils.Supporting import log, logArgs, error
 import hatchet.utils.TotalCounting as tc
@@ -287,17 +288,7 @@ def read_snps(baf_file, ch, all_names):
     all_names = all_names[1:]   # remove normal sample -- not looking for SNP counts from normal
 
     # Read in HATCHet BAF table
-    all_snps = pd.read_table(
-        baf_file,
-        names=['CHR', 'POS', 'SAMPLE', 'REF', 'ALT'],
-        dtype={
-            'CHR': object,
-            'POS': np.uint32,
-            'SAMPLE': object,
-            'ALT': np.uint32,
-            'REF': np.uint32,
-        },
-    )
+    all_snps = read_baf_file(baf_file)
 
     # Keep only SNPs on this chromosome
     snps = all_snps[all_snps.CHR == ch].sort_values(by=['POS', 'SAMPLE'])

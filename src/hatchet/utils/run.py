@@ -37,8 +37,17 @@ def main(args=None):
 
     try:
         chromosomes = [c for c in config.run.chromosomes.split()]
-    except (KeyError, AttributeError):  # if key is absent or is blank (None)
-        chromosomes = []  # process all
+        assert chromosomes
+    except (KeyError, AttributeError, AssertionError):  # if key is absent or is blank (None)
+        raise ValueError(
+            error(
+                (
+                    'Chromosomes field cannot be blank. When excluded from user defined .ini file, '
+                    'HATCHET will use human chromosomes chr1,chr2,...chr22,chrX, and chrY (if present) '
+                    'by default.'
+                )
+            )
+        )
 
     extra_args = []
     try:
