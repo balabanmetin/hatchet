@@ -581,7 +581,7 @@ def parse_count_reads_args(args=None):
     bafFileChromosomeNames = list(set(baf_file['CHR'].values))
     if bafFileChromosomeNames != args.chromosomes:
         log(
-            msg='The following chromosomes are found in the VCF filenames.\n'
+            msg='The following chromosomes are found in the BAF file.\n'
                 f'{bafFileChromosomeNames}\n',
             level='WARN',
         )
@@ -1717,6 +1717,17 @@ def parse_count_reads_fw_arguments(args=None):
         args.regions is None or isfile(args.regions),
         'The specified region file does not exist',
     )
+    try:
+        baf_file = read_baf_file(args.regions)
+    except:
+        raise ValueError(error('The input regions file cannot be parsed!'))
+    bafFileChromosomeNames = list(set(baf_file['CHR'].values))
+    if bafFileChromosomeNames != args.chromosomes:
+        log(
+            msg='The following chromosomes are found in the regions file.\n'
+                f'{bafFileChromosomeNames}\n',
+            level='WARN',
+        )
 
     # In default mode, check the existence and compatibility of samtools and bcftools
     samtools = os.path.join(args.samtools, 'samtools')
@@ -1761,7 +1772,7 @@ def parse_count_reads_fw_arguments(args=None):
     )
 
     # Extract the names of the chromosomes and check their consistency across the given BAM files and the reference
-    chromosomes = extractChromosomes(samtools, normal, samples)
+    chromosomes = extractChromosomes(samtools, bafFileChromosomeNames, normal, samples)
     if args.chromosomes:
         chromosomes = [c for c in chromosomes if c in args.chromosomes]
 
