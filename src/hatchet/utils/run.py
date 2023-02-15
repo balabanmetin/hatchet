@@ -108,12 +108,12 @@ def main(args=None):
                 config.genotype_snps.reference_version,
                 config.genotype_snps.chr_notation,
             ) not in snps_mapping:
-                raise RuntimeError(
-                    (
-                        'Please specify valid values of reference_version and chr_notation. '
-                        f'Valid pairs include: {snps_mapping.keys()}'
-                    )
+                log(
+                    msg=f'Provided reference is not one of the valid ones {[i for i,j in snps_mapping.keys()]} \n'
+                    'As a result, all variants in the genomes will be regarded as SNPs. \n',
+                    level='WARN',
                 )
+                snps = None
             else:
                 snps = snps_mapping[
                     config.genotype_snps.reference_version,
@@ -127,13 +127,12 @@ def main(args=None):
                 config.run.normal,
                 '-r',
                 config.run.reference,
-                '-R',
-                snps,
                 '-o',
                 f'{output}/snps/',
                 '--chromosomes',
             ]
             + (chromosomes or [])  # important to keep this as a list here to allow proper argparse parsing
+            + (['-R', snps] if snps else [])
             + extra_args
         )
 
